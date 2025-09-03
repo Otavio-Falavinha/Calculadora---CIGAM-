@@ -15,8 +15,8 @@ st.sidebar.title("Calculadora | CIGAM")
 topbar = st.container()
 with topbar:
     col_top_1, col_top_2 = st.columns(2)
-    metric_media_top = col_top_1.empty()   # será preenchido com st.metric depois
-    metric_total_top = col_top_2.empty()
+   # será preenchido com st.metric depois
+    metric_total_top = col_top_1.empty()
 
 # =========================
 # Utilitários (formatação)
@@ -25,22 +25,37 @@ def brl(x: float) -> str:
     """Formata número em Real (pt-BR)."""
     return f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def show_df_currency(df: pd.DataFrame, money_cols: list[str]):
-    """
-    Mostra DataFrame com colunas monetárias formatadas com R$.
-    Mantém colunas numéricas quando possível (column_config).
-    """
-    try:
-        cfg = {c: st.column_config.NumberColumn(c, format="R$ %.2f") for c in money_cols}
-        st.dataframe(df, use_container_width=True, hide_index=True, column_config=cfg)
-    except Exception:
-        df2 = df.copy()
-        for c in money_cols:
-            df2[c] = df2[c].map(brl)
-        try:
-            st.dataframe(df2, use_container_width=True, hide_index=True)
-        except TypeError:
-            st.dataframe(df2.reset_index(drop=True), use_container_width=True)
+def format_horas(valor: float) -> str:
+    """Formata número em horas inteiras (arredondadas)."""
+    horas = int(round(valor))  # 👉 arredonda para inteiro
+    return f"{horas}h"
+
+def show_df_currency(
+    df: pd.DataFrame,
+    money_cols: list[str],
+    highlight_col: str | None = None,
+    text_color: str = "#22c55e",   # verde
+    bg_color: str | None = None,   # ex: "#052e16"
+    hours_cols: list[str] = []
+):
+    df2 = df.copy()
+
+    # mantém numérico e formata via Styler (em vez de virar string)
+    fmt = {c: lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") for c in money_cols}
+    styler = df2.style.format(fmt)
+
+    for c in hours_cols:
+        df2[c] = df2[c].apply(format_horas)
+
+    if highlight_col and highlight_col in df2.columns:
+        props = {}
+        if text_color: props["color"] = text_color
+        if bg_color:   props["background-color"] = bg_color
+        if props:
+            styler = styler.set_properties(subset=[highlight_col], **props)
+
+    # 👉 st.table preserva o Styler (cores)
+    st.table(styler)
 
 # =========================
 # Entradas (sidebar)
@@ -137,7 +152,7 @@ meses_rotulo = [f"Mês {i}" for i in range(1, total_meses + 1)]
 horas_m1 = min(H_PRIMEIRO_MES, horas_totais_projeto)            # 1º mês fixo
 horas_restantes = max(0.0, horas_totais_projeto - horas_m1)     # saldo para M2..MN
 
-st.subheader(f"Percentuais para os meses 2..{total_meses} (automático)")
+st.subheader(f"Percentuais para os meses 2..{total_meses - 1} (automático)")
 
 # --- 100% automático: perfil em U nos meses 2..N, com ênfase no começo e no fim ---
 k = periodo_restante  # quantidade de meses após o mês 1
@@ -185,24 +200,11 @@ total_projeto_reais = float(custo_instal + custo_map + homologacao + custo_total
 # =========================
 # KPIs no topo
 # =========================
-metric_media_top.metric("Média por período", brl(float(custo_total_mes.mean())))
 metric_total_top.metric("Total do projeto", brl(float(total_projeto_reais)))
 
 # =========================
 # Tabelas
 # =========================
-st.subheader("Tabela de Avanço x Horas mensais")
-df_avanco = pd.DataFrame({
-    "Período": meses_rotulo,
-    "Avanço mensal (%)": [np.nan] + (list(np.round(pcts5, 2)) if k > 0 else []),
-    "Horas do mês": horas_mes
-})
-try:
-    st.dataframe(df_avanco, use_container_width=True, hide_index=True)
-except TypeError:
-    st.dataframe(df_avanco.reset_index(drop=True), use_container_width=True)
-
-st.subheader("Custos por período")
 df_custos = pd.DataFrame({
     "Período": meses_rotulo,
     "Horas do mês": horas_mes,
@@ -211,11 +213,23 @@ df_custos = pd.DataFrame({
     "Fixos mensais (R$)": np.round(fixos_mensais, 2),
     "Total do Período (R$)": custo_total_mes
 })
+
+
+st.subheader("Custos por período")
 show_df_currency(
     df_custos,
-    ["Consumo Horas Projeto Mensal (R$)", "Gestão do Projeto (R$)", "Fixos mensais (R$)", "Total do Período (R$)"]
+    ["Consumo Horas Projeto Mensal (R$)", "Gestão do Projeto (R$)", "Fixos mensais (R$)", "Total do Período (R$)"],
+    hours_cols=["Horas do mês"],
+    highlight_col="Total do Período (R$)"
 )
 
+st.subheader("Tabela de Avanço x Horas mensais")
+df_avanco = pd.DataFrame({
+    "Período": meses_rotulo,
+    "Avanço mensal (%)": [np.nan] + (list(np.round(pcts5, 2)) if k > 0 else []),
+    "Horas do mês": horas_mes
+})
+st.dataframe(df_avanco, use_container_width=True, hide_index=True)
 st.subheader("Componentes únicos do projeto (não mensais)")
 df_unicos = pd.DataFrame({
     "Componente": ["Instalação infra", "Mapeamento inicial", "Homologação"],
@@ -238,3 +252,4 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
