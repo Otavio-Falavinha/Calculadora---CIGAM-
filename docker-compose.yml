@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  calculadora:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8503:8503"
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    environment:
+      - STREAMLIT_SERVER_PORT=8503
+      - STREAMLIT_SERVER_HEADLESS=true
