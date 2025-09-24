@@ -15,32 +15,27 @@ st.sidebar.title("Calculadora | CIGAM")
 topbar = st.container()
 with topbar:
     col_top_1, col_top_2 = st.columns(2)
-   # será preenchido com st.metric depois
     metric_total_top = col_top_1.empty()
 
 # =========================
 # Utilitários (formatação)
 # =========================
 def brl(x: float) -> str:
-    """Formata número em Real (pt-BR)."""
     return f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def format_horas(valor: float) -> str:
-    """Formata número em horas inteiras (arredondadas)."""
-    horas = int(round(valor))  # 👉 arredonda para inteiro
+    horas = int(round(valor))
     return f"{horas}h"
 
 def show_df_currency(
     df: pd.DataFrame,
     money_cols: list[str],
     highlight_col: str | None = None,
-    text_color: str = "#22c55e",   # verde
-    bg_color: str | None = None,   # ex: "#052e16"
+    text_color: str = "#22c55e",
+    bg_color: str | None = None,
     hours_cols: list[str] = []
 ):
     df2 = df.copy()
-
-    # mantém numérico e formata via Styler (em vez de virar string)
     fmt = {c: lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") for c in money_cols}
     styler = df2.style.format(fmt)
 
@@ -54,153 +49,130 @@ def show_df_currency(
         if props:
             styler = styler.set_properties(subset=[highlight_col], **props)
 
-    # 👉 st.table preserva o Styler (cores)
     st.table(styler)
 
 # =========================
 # Entradas (sidebar)
 # =========================
-# Agora este slider representa os MESES APÓS o 1º mês (fixo).
-# Se escolher 6 => total = 1 (M1) + 6 (M2..M7) = 7 meses.
-periodo_restante = st.sidebar.slider(
-    "Meses após o 1º (M2..N)",
+periodo_total = st.sidebar.slider(
+    "Meses totais do projeto (incluindo o 1º)",
     min_value=6, max_value=12, value=6, step=1
 )
 
-# Custos fixos recorrentes por mês (R$)
-nuvem = st.sidebar.number_input("Valor nuvem (R$/mês)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
+# Fixos mensais (variáveis)
+nuvem = st.sidebar.number_input("Nuvem (R$/mês)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
 mensalidade_cigam = st.sidebar.number_input("Mensalidade CIGAM (R$/mês)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
-mensalidade_mercos = st.sidebar.number_input("Mensalidade Mercos (R$/mês)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
+
+# Mercos com mudança de valor
+mensalidade_mercos_inicial = st.sidebar.number_input(
+    "Mensalidade Mercos inicial (R$/mês)", min_value=0.0, value=693.0, step=10.0, format="%.2f"
+)
+mes_inicio_novo_valor = st.sidebar.number_input(
+    "Mês da mudança de valor (ex: 5 = a partir do Mês 5)", min_value=1, max_value=periodo_total, value=5, step=1
+)
+mensalidade_mercos_novo = st.sidebar.number_input(
+    "Novo valor Mercos (R$/mês)", min_value=0.0, value=2079.0, step=10.0, format="%.2f"
+)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Informe as **horas totais do projeto** (usadas nas fórmulas abaixo).")
+st.sidebar.caption("Informe as **horas totais do projeto**.")
 horas_totais_projeto = st.sidebar.number_input("Horas totais do projeto", min_value=0.0, value=0.0, step=0.1, format="%.1f")
-valor_hora = st.sidebar.number_input("Valor da hora (R$)", min_value=0.0, value=255.0, step=10.0, format="%.2f")
+valor_hora = st.sidebar.number_input("Valor da hora (R$)", min_value=0.0, value=270.0, step=10.0, format="%.2f")
 
-# Homologação é valor único (não depende de horas)
+# Componentes únicos informados pelo usuário
+st.sidebar.markdown("---")
+custo_instal = st.sidebar.number_input("Instalação infra (R$)", min_value=0.0, value=valor_hora * 20, step=20.0, format="%.2f")
+custo_map = st.sidebar.number_input("Mapeamento inicial (R$)", min_value=0.0, value=valor_hora * 50, step=50.0, format="%.2f")
 homologacao = st.sidebar.number_input("Homologação (R$)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
 
 # =========================
-# Regras/Helpers de percentuais (100% automático)
+# Regras/Helpers
 # =========================
-H_PRIMEIRO_MES = 70.0  # 70 horas fixas no 1º mês
+H_PRIMEIRO_MES = 70.0
 
 def perfil_U_automatico(k: int) -> np.ndarray:
-    """
-    Gera k porcentagens (somam 100) com foco automático no início e no fim (perfil em U).
-    Último mês recebe mais ênfase que o primeiro.
-    k = quantidade de meses APÓS o 1º (ou seja, M2..MN).
-    """
     if k <= 0:
         return np.array([])
     if k == 1:
         return np.array([100.0])
-
-    # Parâmetros fixos (primeiro < último):
-    forca = 3
-    enfase_inicio = 1.4   # um pouco menor
-    enfase_fim = 2.0      # um pouco maior
-
+    forca = 2
+    enfase_inicio = 1.6
+    enfase_fim = 2.5
     x = np.linspace(0, 1, k)
     base = (1 - x) ** forca * enfase_inicio + x ** forca * enfase_fim
     p = 100 * base / base.sum()
     return p
 
 def quantize_to_5(pcts_raw: np.ndarray, min_pct: float = 5.0) -> np.ndarray:
-    """
-    Converte % para múltiplos de 5 com mínimo por mês e normaliza para 100%.
-    Sempre normaliza para 100 para manter robustez ao trocar o período.
-    """
     arr = np.maximum(0.0, np.array(pcts_raw, dtype=float))
     k = arr.size
     if k == 0:
         return arr
-
-    units_total = 20                         # 100% / 5%
-    min_units = int(np.ceil(min_pct / 5.0))  # 5% -> 1 unidade
-
-    # baseline: mínimo garantido para cada mês
+    units_total = 20
+    min_units = int(np.ceil(min_pct / 5.0))
     base_units = np.full(k, min_units, dtype=int)
     remaining_units = units_total - base_units.sum()
     if remaining_units <= 0:
         return base_units.astype(float) * 5.0
-
-    # pesos para distribuir o restante
     if arr.sum() <= 0:
         ideal = np.full(k, remaining_units / k)
     else:
         ideal = arr / arr.sum() * remaining_units
-
     add_units = np.floor(ideal).astype(int)
     leftover = remaining_units - add_units.sum()
-
-    # distribui sobras pelas maiores frações
     fracs = ideal - add_units
     order = np.argsort(-fracs)
     if leftover > 0:
         add_units[order[:leftover]] += 1
-
     units = base_units + add_units
     return units.astype(float) * 5.0
 
 # =========================
-# Distribuição de meses e horas
+# Cálculos principais
 # =========================
-total_meses = periodo_restante + 1  # inclui o mês 1 fixo
+total_meses = periodo_total
 meses_rotulo = [f"Mês {i}" for i in range(1, total_meses + 1)]
 
-horas_m1 = min(H_PRIMEIRO_MES, horas_totais_projeto)            # 1º mês fixo
-horas_restantes = max(0.0, horas_totais_projeto - horas_m1)     # saldo para M2..MN
+horas_m1 = min(H_PRIMEIRO_MES, horas_totais_projeto)
+horas_restantes = max(0.0, horas_totais_projeto - horas_m1)
 
-st.subheader(f"Percentuais para os meses 2..{total_meses - 1} (automático)")
-
-# --- 100% automático: perfil em U nos meses 2..N, com ênfase no começo e no fim ---
-k = periodo_restante  # quantidade de meses após o mês 1
+k = total_meses - 1
 pcts_raw = perfil_U_automatico(k)
-pcts5 = quantize_to_5(pcts_raw, min_pct=5.0)  # múltiplos de 5 e soma=100
+pcts5 = quantize_to_5(pcts_raw, min_pct=5.0)
 soma_pct = float(pcts5.sum())
 
-# Pesos finais e horas por mês
 w = pcts5 / 100.0 if soma_pct > 0 else (np.ones(k) / k if k > 0 else np.array([]))
 
 horas_mes = np.zeros(total_meses, dtype=float)
-horas_mes[0] = horas_m1  # 1º mês já é "enfatizado" pelas 70h fixas
+horas_mes[0] = horas_m1
 if k > 0:
-    # sobra distribuída com ênfase no início (M2) e fim (MN) do restante
     horas_mes[1:] = np.round(horas_restantes * w, 2)
 
-# =========================
-# Componentes únicos do projeto (não mensais)
-# =========================
-custo_instal = float(valor_hora * 20.0)  # Instalação infra = 20h
-custo_map    = float(valor_hora * 50.0)  # Mapeamento inicial = 50h
-
-# =========================
-# Custos mensais
-# =========================
+# Consumo do projeto mensal
 consumo_projeto_mensal = np.round(horas_mes * valor_hora, 2)
+gestao_mes = np.round(0.20 * consumo_projeto_mensal, 2)
 
-# Gestão:
-# - Mês 1: 20% * (Instalação + Mapeamento)
-# - Meses 2..N: 20% * Consumo Horas Projeto Mensal do mês
-gestao_mes = np.zeros(total_meses, dtype=float)
-gestao_mes[0] = round(0.20 * (custo_instal + custo_map), 2)
-if total_meses > 1:
-    gestao_mes[1:] = np.round(0.20 * consumo_projeto_mensal[1:], 2)
+# Fixos mensais considerando mudança no Mercos
+fixos_mensais_array = np.zeros(total_meses)
+for i in range(total_meses):
+    if i+1 < mes_inicio_novo_valor:  # antes da mudança
+        fixos_mensais_array[i] = nuvem + mensalidade_cigam + mensalidade_mercos_inicial
+    else:  # após ou no mês da mudança
+        fixos_mensais_array[i] = nuvem + mensalidade_cigam + mensalidade_mercos_novo
 
-# Fixos mensais (mesmo valor em todos os meses)
-fixos_mensais = float(nuvem + mensalidade_cigam + mensalidade_mercos)
+# Custos mensais (somados) -> apenas recorrentes
+custo_total_mes = np.round(consumo_projeto_mensal + gestao_mes + fixos_mensais_array, 2)
 
-# Custo total por período
-custo_total_mes = np.round(consumo_projeto_mensal + gestao_mes + fixos_mensais, 2)
-
-# Total do projeto
-total_projeto_reais = float(custo_instal + custo_map + homologacao + custo_total_mes.sum())
+# Total do projeto = recorrentes + componentes únicos (apenas uma vez)
+total_projeto_reais = float(custo_total_mes.sum() + custo_instal + custo_map + homologacao)
 
 # =========================
-# KPIs no topo
+# KPI no topo
 # =========================
-metric_total_top.metric("Total do projeto", brl(float(total_projeto_reais)))
+if (horas_totais_projeto > 0 or custo_instal > 0 or custo_map > 0 or homologacao > 0 or np.any(fixos_mensais_array > 0)):
+    metric_total_top.metric("Total do projeto", brl(total_projeto_reais))
+else:
+    metric_total_top.metric("Total do projeto", "—")
 
 # =========================
 # Tabelas
@@ -210,10 +182,9 @@ df_custos = pd.DataFrame({
     "Horas do mês": horas_mes,
     "Consumo Horas Projeto Mensal (R$)": consumo_projeto_mensal,
     "Gestão do Projeto (R$)": gestao_mes,
-    "Fixos mensais (R$)": np.round(fixos_mensais, 2),
+    "Fixos mensais (R$)": np.round(fixos_mensais_array, 2),
     "Total do Período (R$)": custo_total_mes
 })
-
 
 st.subheader("Custos por período")
 show_df_currency(
@@ -230,6 +201,7 @@ df_avanco = pd.DataFrame({
     "Horas do mês": horas_mes
 })
 st.dataframe(df_avanco, use_container_width=True, hide_index=True)
+
 st.subheader("Componentes únicos do projeto (não mensais)")
 df_unicos = pd.DataFrame({
     "Componente": ["Instalação infra", "Mapeamento inicial", "Homologação"],
@@ -238,7 +210,7 @@ df_unicos = pd.DataFrame({
 show_df_currency(df_unicos, ["Custo (R$)"])
 
 # =========================
-# Estilo: topbar "grudada" ao rolar
+# Estilo: topbar grudada
 # =========================
 st.markdown(
     """
@@ -252,4 +224,3 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
