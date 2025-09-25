@@ -68,10 +68,8 @@ st.sidebar.caption("Informe as **horas totais do projeto**.")
 horas_totais_projeto = st.sidebar.number_input("Horas totais do projeto", min_value=0.0, value=0.0, step=0.1, format="%.1f")
 valor_hora = st.sidebar.number_input("Valor da hora (R$)", min_value=0.0, value=270.0, step=10.0, format="%.2f")
 
-# Componentes únicos informados pelo usuário
+# Apenas homologação como custo único
 st.sidebar.markdown("---")
-custo_instal = st.sidebar.number_input("Instalação infra (R$)", min_value=0.0, value=valor_hora * 20, step=20.0, format="%.2f")
-custo_map = st.sidebar.number_input("Mapeamento inicial (R$)", min_value=0.0, value=valor_hora * 50, step=50.0, format="%.2f")
 homologacao = st.sidebar.number_input("Homologação (R$)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
 
 # =========================
@@ -149,13 +147,13 @@ for i in range(total_meses):
 # Custos mensais (somados) -> apenas recorrentes
 custo_total_mes = np.round(consumo_projeto_mensal + gestao_mes + fixos_mensais_array, 2)
 
-# Total do projeto = recorrentes + componentes únicos (apenas uma vez)
-total_projeto_reais = float(custo_total_mes.sum() + custo_instal + custo_map + homologacao)
+# Total do projeto = recorrentes + homologação
+total_projeto_reais = float(custo_total_mes.sum() + homologacao)
 
 # =========================
 # KPI no topo
 # =========================
-if (horas_totais_projeto > 0 or custo_instal > 0 or custo_map > 0 or homologacao > 0 or np.any(fixos_mensais_array > 0)):
+if (horas_totais_projeto > 0 or homologacao > 0 or np.any(fixos_mensais_array > 0)):
     metric_total_top.metric("Total do projeto", brl(total_projeto_reais))
 else:
     metric_total_top.metric("Total do projeto", "—")
@@ -168,6 +166,7 @@ df_custos = pd.DataFrame({
     "Horas do mês": horas_mes,
     "Consumo Horas Projeto Mensal (R$)": consumo_projeto_mensal,
     "Gestão do Projeto (R$)": gestao_mes,
+    "Fixos mensais (R$)": np.round(fixos_mensais_array, 2),
     "Total do Período (R$)": custo_total_mes
 })
 
@@ -189,8 +188,8 @@ st.dataframe(df_avanco, use_container_width=True, hide_index=True)
 
 st.subheader("Componentes únicos do projeto (não mensais)")
 df_unicos = pd.DataFrame({
-    "Componente": ["Instalação infra", "Mapeamento inicial", "Homologação"],
-    "Custo (R$)": [custo_instal, custo_map, homologacao]
+    "Componente": ["Homologação"],
+    "Custo (R$)": [homologacao]
 })
 show_df_currency(df_unicos, ["Custo (R$)"])
 
