@@ -55,24 +55,13 @@ def show_df_currency(
 # Entradas (sidebar)
 # =========================
 periodo_total = st.sidebar.slider(
-    "Meses totais do projeto (incluindo o 1º)",
+    "Meses",
     min_value=6, max_value=12, value=6, step=1
 )
 
 # Fixos mensais (variáveis)
 nuvem = st.sidebar.number_input("Nuvem (R$/mês)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
 mensalidade_cigam = st.sidebar.number_input("Mensalidade CIGAM (R$/mês)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
-
-# Mercos com mudança de valor
-mensalidade_mercos_inicial = st.sidebar.number_input(
-    "Mensalidade Mercos inicial (R$/mês)", min_value=0.0, value=693.0, step=10.0, format="%.2f"
-)
-mes_inicio_novo_valor = st.sidebar.number_input(
-    "Mês da mudança de valor (ex: 5 = a partir do Mês 5)", min_value=1, max_value=periodo_total, value=5, step=1
-)
-mensalidade_mercos_novo = st.sidebar.number_input(
-    "Novo valor Mercos (R$/mês)", min_value=0.0, value=2079.0, step=10.0, format="%.2f"
-)
 
 st.sidebar.markdown("---")
 st.sidebar.caption("Informe as **horas totais do projeto**.")
@@ -152,13 +141,10 @@ if k > 0:
 consumo_projeto_mensal = np.round(horas_mes * valor_hora, 2)
 gestao_mes = np.round(0.20 * consumo_projeto_mensal, 2)
 
-# Fixos mensais considerando mudança no Mercos
+# Fixos mensais (apenas nuvem + cigam)
 fixos_mensais_array = np.zeros(total_meses)
 for i in range(total_meses):
-    if i+1 < mes_inicio_novo_valor:  # antes da mudança
-        fixos_mensais_array[i] = nuvem + mensalidade_cigam + mensalidade_mercos_inicial
-    else:  # após ou no mês da mudança
-        fixos_mensais_array[i] = nuvem + mensalidade_cigam + mensalidade_mercos_novo
+    fixos_mensais_array[i] = nuvem + mensalidade_cigam
 
 # Custos mensais (somados) -> apenas recorrentes
 custo_total_mes = np.round(consumo_projeto_mensal + gestao_mes + fixos_mensais_array, 2)
@@ -182,7 +168,6 @@ df_custos = pd.DataFrame({
     "Horas do mês": horas_mes,
     "Consumo Horas Projeto Mensal (R$)": consumo_projeto_mensal,
     "Gestão do Projeto (R$)": gestao_mes,
-    "Fixos mensais (R$)": np.round(fixos_mensais_array, 2),
     "Total do Período (R$)": custo_total_mes
 })
 
