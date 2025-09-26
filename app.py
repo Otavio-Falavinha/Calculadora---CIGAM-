@@ -144,10 +144,13 @@ fixos_mensais_array = np.zeros(total_meses)
 for i in range(total_meses):
     fixos_mensais_array[i] = nuvem + mensalidade_cigam
 
-# Custos mensais (somados) -> apenas recorrentes
-custo_total_mes = np.round(consumo_projeto_mensal + gestao_mes + fixos_mensais_array, 2)
+# Custos recorrentes (sem fixos)
+custo_total_mes = np.round(consumo_projeto_mensal + gestao_mes, 2)
 
-# Total do projeto = recorrentes + homologação
+# Custos exibidos na tabela (com fixos)
+custo_total_mes_com_fixos = np.round(custo_total_mes + fixos_mensais_array, 2)
+
+# Total do projeto = apenas recorrentes + homologação (sem fixos mensais)
 total_projeto_reais = float(custo_total_mes.sum() + homologacao)
 
 # =========================
@@ -167,7 +170,7 @@ df_custos = pd.DataFrame({
     "Consumo Horas Projeto Mensal (R$)": consumo_projeto_mensal,
     "Gestão do Projeto (R$)": gestao_mes,
     "Fixos mensais (R$)": np.round(fixos_mensais_array, 2),
-    "Total do Período (R$)": custo_total_mes
+    "Total do Período (R$)": custo_total_mes_com_fixos
 })
 
 st.subheader("Custos por período")
