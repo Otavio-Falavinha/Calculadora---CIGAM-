@@ -48,7 +48,7 @@ def show_df_currency(
         if bg_color:   props["background-color"] = bg_color
         if props:
             styler = styler.set_properties(subset=[highlight_col], **props)
-
+ 
     st.table(styler)
 
 # =========================
@@ -139,7 +139,7 @@ if k > 0:
 consumo_projeto_mensal = np.round(horas_mes * valor_hora, 2)
 gestao_mes = np.round(0.20 * consumo_projeto_mensal, 2)
 
-# Fixos mensais (apenas nuvem + cigam)
+# Fixos mensais (para exibição na tabela: nuvem + cigam)
 fixos_mensais_array = np.zeros(total_meses)
 for i in range(total_meses):
     fixos_mensais_array[i] = nuvem + mensalidade_cigam
@@ -147,10 +147,10 @@ for i in range(total_meses):
 # Custos recorrentes (sem fixos)
 custo_total_mes = np.round(consumo_projeto_mensal + gestao_mes, 2)
 
-# Custos exibidos na tabela (com fixos)
+# Custos exibidos na tabela (com fixos nuvem + cigam)
 custo_total_mes_com_fixos = np.round(custo_total_mes + fixos_mensais_array, 2)
 
-# Total do projeto = apenas recorrentes + homologação (sem fixos mensais)
+# Total do projeto = consumo + gestão + homologação (sem fixos)
 total_projeto_reais = float(custo_total_mes.sum() + homologacao)
 
 # =========================
